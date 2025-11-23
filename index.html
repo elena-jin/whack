@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>World Wide Whale | WHACK 2025</title>
+    <meta name="description" content="A virus infiltration educational game for WHACK 2025. Powered by Gemini.">
+    
+    <!-- Google Fonts: Press Start 2P for that 8-bit aesthetic -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- CSS VARIABLES & THEME --- */
+        :root {
+            --bg-dark: #050511;
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff0055;
+            --neon-green: #00ff9d;
+            --neon-gold: #ffd700;
+            --ui-bg: rgba(12, 20, 31, 0.95);
+            --font-retro: 'Press Start 2P', cursive;
+            --font-hud: 'Rajdhani', sans-serif;
+        }
+
+        /* --- RESET & LAYOUT --- */
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--bg-dark);
+            overflow: hidden;
+            font-family: var(--font-retro);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        /* --- GAME CONTAINER (THE MONITOR) --- */
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 1000px;
+            max-height: 600px;
+            background: #000;
+            box-shadow: 0 0 50px rgba(0, 243, 255, 0.15);
+            border: 2px solid #333;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated; /* Keeps pixel art crisp */
+        }
+
+        /* --- CRT SCANLINE EFFECT --- */
+        .scanlines {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* --- UI OVERLAYS --- */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 20;
+            backdrop-filter: blur(4px);
+            transition: opacity 0.3s;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 {
+            color: var(--neon-blue);
+            font-size: 2rem;
+            text-shadow: 4px 4px 0px #2a004d;
+            margin-bottom: 1rem;
+            line-height: 1.5;
+        }
+
+        h2 {
+            color: var(--neon-pink);
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+
+        p {
+            font-family: var(--font-hud);
+            font-size: 1.2rem;
+            max-width: 600px;
+            line-height: 1.4;
+            margin-bottom: 2rem;
+            color: #ccc;
+        }
+
+        /* --- INPUTS & BUTTONS --- */
+        .input-group {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid var(--neon-blue);
+            color: white;
+            padding: 10px;
+            font-family: var(--font-hud);
+            font-size: 1.2rem;
+            width: 300px;
+            text-align: center;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .btn {
+            background: var(--neon-pink);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-family: var(--font-retro);
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 4px 4px 0px #9d0038;
+            transition: transform 0.1s;
+            text-transform: uppercase;
+            margin: 5px;
+        }
+
+        .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #9d0038; }
+        
+        .btn-ai {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 4px 4px 0px #008c9e;
+        }
+        
+        .btn-ai:hover { background: #c4fcfc; }
+
+        .btn-explain {
+            background: var(--neon-gold);
+            color: black;
+            font-size: 0.8rem;
+            padding: 10px 15px;
+            box-shadow: 3px 3px 0px #b8860b;
+            margin-top: 10px;
+        }
+
+        /* --- HUD --- */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 15;
+            pointer-events: none;
+            font-family: var(--font-hud);
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        .hud-panel {
+            background: rgba(0,0,0,0.6);
+            border: 1px solid var(--neon-blue);
+            padding: 10px 20px;
+            border-radius: 4px;
+            color: var(--neon-blue);
+        }
+
+        /* --- QUIZ MODAL --- */
+        #quiz-container {
+            background: var(--ui-bg);
+            border: 2px solid var(--neon-pink);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(255, 0, 85, 0.3);
+            max-width: 550px;
+            width: 90%;
+        }
+
+        .quiz-option {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid #555;
+            padding: 15px;
+            margin: 8px 0;
+            cursor: pointer;
+            font-family: var(--font-hud);
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .quiz-option:hover { background: rgba(0, 243, 255, 0.2); border-color: var(--neon-blue); }
+        .correct { background: rgba(0, 255, 157, 0.4) !important; border-color: var(--neon-green); }
+        .wrong { background: rgba(255, 0, 85, 0.4) !important; border-color: var(--neon-pink); }
+
+        #ai-explanation {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0,0,0,0.4);
+            border-left: 3px solid var(--neon-gold);
+            font-family: var(--font-hud);
+            font-size: 1rem;
+            text-align: left;
+            display: none;
+            color: #ffd700;
+        }
+
+        /* --- LOADING SPINNER --- */
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left: 4px solid var(--neon-blue);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* --- MOBILE CONTROLS --- */
+        #mobile-tap-area {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 5;
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <div class="scanlines"></div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+        <div class="hud-panel">TOPIC: <span id="region-text">L1 CACHE</span></div>
+        <div class="hud-panel">DATA: <span id="score-text">0</span></div>
+    </div>
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="screen">
+        <h1>WORLD WIDE WHALE</h1>
+        <p>Navigate the ocean of data.<br>Hack the system by answering questions.</p>
+        
+        <div class="input-group">
+            <label style="color: var(--neon-blue); font-size: 0.8rem;">TARGET SYSTEM (TOPIC)</label>
+            <input type="text" id="topic-input" value="Computer Architecture" placeholder="e.g. Biology, History, Swiftie Trivia">
+        </div>
+
+        <div>
+            <button class="btn" onclick="game.start(false)">LAUNCH STANDARD</button>
+            <button class="btn btn-ai" onclick="game.start(true)">✨ GENERATE AI LEVEL</button>
+        </div>
+        <div id="loading-msg" style="margin-top:10px; color: var(--neon-blue); display:none;">
+            GENERATING PAYLOAD <div class="loader"></div>
+        </div>
+    </div>
+
+    <!-- QUIZ SCREEN -->
+    <div id="quiz-screen" class="screen hidden">
+        <div id="quiz-container">
+            <h2 style="color: var(--neon-pink)" id="quiz-title">FIREWALL BLOCKED!</h2>
+            <p id="question-text" style="margin-bottom: 15px;">Loading...</p>
+            <div id="options-container"></div>
+            
+            <!-- AI Explanation Area -->
+            <div id="ai-explanation"></div>
+            <button id="explain-btn" class="btn btn-explain hidden" onclick="game.explainWithAI()">✨ DECRYPT DATA (EXPLAIN)</button>
+        </div>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="game-over-screen" class="screen hidden">
+        <h1 style="color: var(--neon-pink)">SYSTEM PURGE</h1>
+        <p>The Antivirus caught you.</p>
+        <p>Data Packets Collected: <span id="final-score" style="color: white">0</span></p>
+        <button class="btn" onclick="game.reset()">REBOOT SYSTEM</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    <div id="mobile-tap-area"></div>
+</div>
+
+<script>
+/*
+ * WORLD WIDE WHALE - WHACK 2025
+ * Integrated with Gemini API for Dynamic Levels & Explanations
+ */
+
+// --- CONFIGURATION ---
+const apiKey = ""; // PASTE YOUR GEMINI API KEY HERE
+
+// --- ASSET LOADER ---
+const assets = {
+    whaleOpen: new Image(),
+    whaleClosed: new Image(),
+    bg: new Image(),
+    whaleLoaded: false,
+    bgLoaded: false
+};
+
+// Use raw GitHub URLs to ensure they load correctly as images
+assets.whaleOpen.src = 'https://raw.githubusercontent.com/jwang9500/WorldwideWhale-gdscript/main/Art/whale_eyes_open.png'; 
+assets.whaleClosed.src = 'https://raw.githubusercontent.com/jwang9500/WorldwideWhale-gdscript/main/Art/whale_eyes_closed.png';
+assets.bg.src = 'image_cf0ade.png';
+
+// Track when both whale images are ready
+let loadedCount = 0;
+const checkLoad = () => {
+    loadedCount++;
+    if (loadedCount >= 2) assets.whaleLoaded = true;
+};
+
+assets.whaleOpen.onload = checkLoad;
+assets.whaleClosed.onload = checkLoad;
+assets.bg.onload = () => { assets.bgLoaded = true; };
+
+// --- DATA & STATE ---
+// Hardcoded fallback data so game works even without API key
+const defaultQuestions = [
+    { q: "What is the CPU's fast internal memory called?", o: ["RAM", "HDD", "Cache", "ROM"], a: 2 },
+    { q: "What does RAM stand for?", o: ["Random Access Memory", "Read All Memory", "Run Access Mode", "Real Active Memory"], a: 0 },
+    { q: "Which component handles graphics rendering?", o: ["CPU", "GPU", "PSU", "SSD"], a: 1 },
+    { q: "A 0 or 1 in binary is a...", o: ["Byte", "Bit", "Nibble", "Word"], a: 1 },
+    { q: "Which storage is non-volatile (saves when off)?", o: ["RAM", "L1 Cache", "Registers", "SSD"], a: 3 }
+];
+
+let currentQuestions = [...defaultQuestions];
+let activeQuestion = null;
+
+// --- GEMINI API HANDLER ---
+const AI = {
+    available: () => apiKey.length > 0,
+
+    async generateQuestions(topic) {
+        if (!this.available()) {
+            alert("Please add an API Key in the code to use AI features!");
+            return null;
+        }
+
+        const prompt = `Generate 5 multiple choice questions about "${topic}". 
+        Return ONLY valid JSON in this format: 
+        [{"q": "Question text", "o": ["Option1", "Option2", "Option3", "Option4"], "a": 0}] 
+        where 'a' is the index (0-3) of the correct answer. Keep questions concise (under 15 words).`;
+
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                })
+            });
+
+            const data = await response.json();
+            const text = data.candidates[0].content.parts[0].text;
+            return JSON.parse(text);
+        } catch (error) {
+            console.error("Gemini Error:", error);
+            return null;
+        }
+    },
+
+    async explain(question, answer) {
+        if (!this.available()) return "AI features not enabled.";
+
+        const prompt = `Explain in 1 short, witty sentence why "${answer}" is the correct answer to "${question}". 
+        Pretend you are a helpful computer virus.`;
+
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }]
+                })
+            });
+
+            const data = await response.json();
+            return data.candidates[0].content.parts[0].text;
+        } catch (error) {
+            return "Encryption too strong. Cannot explain.";
+        }
+    }
+};
+
+// --- GAME ENGINE ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const tapArea = document.getElementById('mobile-tap-area');
+
+const GRAVITY = 0.4;
+const FLAP = -6;
+const SPAWN_RATE = 120;
+const PIPE_SPEED = 3;
+const PIPE_GAP = 170;
+
+let game = {
+    active: false,
+    paused: false,
+    frames: 0,
+    score: 0,
+    
+    resize: function() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+    },
+
+    start: async function(useAI) {
+        const topicInput = document.getElementById('topic-input').value || "Computer Architecture";
+        
+        // Handle AI Loading
+        if (useAI) {
+            const loading = document.getElementById('loading-msg');
+            loading.style.display = 'block';
+            const newQs = await AI.generateQuestions(topicInput);
+            loading.style.display = 'none';
+            
+            if (newQs && newQs.length > 0) {
+                currentQuestions = newQs;
+                document.getElementById('region-text').innerText = topicInput.toUpperCase();
+            } else {
+                alert("AI Generation failed (or no Key). Using default data.");
+                currentQuestions = [...defaultQuestions];
+                document.getElementById('region-text').innerText = "DEFAULT SYS";
+            }
+        } else {
+            currentQuestions = [...defaultQuestions];
+            document.getElementById('region-text').innerText = "STANDARD SYS";
+        }
+
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        
+        this.active = true;
+        this.paused = false;
+        this.score = 0;
+        this.frames = 0;
+        
+        whale.reset();
+        pipes.reset();
+        particles.reset();
+        
+        loop();
+    },
+
+    reset: function() {
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('start-screen').classList.remove('hidden');
+        document.getElementById('hud').classList.add('hidden');
+    },
+
+    gameOver: function() {
+        this.active = false;
+        document.getElementById('final-score').innerText = this.score;
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        document.getElementById('hud').classList.add('hidden');
+    },
+
+    triggerQuiz: function() {
+        this.paused = true;
+        activeQuestion = currentQuestions[Math.floor(Math.random() * currentQuestions.length)];
+        
+        document.getElementById('quiz-screen').classList.remove('hidden');
+        document.getElementById('question-text').innerText = activeQuestion.q;
+        document.getElementById('quiz-title').innerText = "FIREWALL BLOCKED!";
+        
+        // Reset UI elements
+        document.getElementById('ai-explanation').style.display = 'none';
+        document.getElementById('explain-btn').classList.add('hidden');
+        
+        const cont = document.getElementById('options-container');
+        cont.innerHTML = '';
+        
+        activeQuestion.o.forEach((opt, idx) => {
+            let div = document.createElement('div');
+            div.className = 'quiz-option';
+            div.innerText = `> ${opt}`;
+            div.onclick = (e) => this.handleAnswer(idx, div);
+            cont.appendChild(div);
+        });
+    },
+
+    handleAnswer: function(idx, div) {
+        // Disable further clicks
+        Array.from(document.getElementsByClassName('quiz-option')).forEach(d => d.style.pointerEvents = 'none');
+
+        const isCorrect = idx === activeQuestion.a;
+        div.classList.add(isCorrect ? 'correct' : 'wrong');
+
+        // Show Explain Button
+        document.getElementById('explain-btn').classList.remove('hidden');
+        
+        if (isCorrect) {
+            document.getElementById('quiz-title').innerText = "ACCESS GRANTED";
+            setTimeout(() => this.resumeFromQuiz(true), 1500);
+        } else {
+            document.getElementById('quiz-title').innerText = "ACCESS DENIED";
+            setTimeout(() => this.resumeFromQuiz(false), 1500);
+        }
+    },
+
+    resumeFromQuiz: function(success) {
+        // If they clicked explain, don't close yet (logic handled by user patience, 
+        // but for game flow we usually close automatically. 
+        // Let's only auto-close if they haven't clicked explain in 1.5s. 
+        // Actually, simpler: Auto close, but if they click explain, pause the auto-close?
+        // For this MVP, let's just auto-resume. The explain button is best used FAST or make the user close manually.
+        // BETTER UX: If answer is wrong/right, wait for user to click "Continue" or "Explain".
+        // For flow, we will just resume unless they are reading.
+        
+        // To keep it snappy:
+        document.getElementById('quiz-screen').classList.add('hidden');
+        if (success) {
+            this.paused = false;
+            whale.y -= 20;
+            whale.velocity = 0;
+            pipes.list = pipes.list.filter(p => p.x < whale.x - 50 || p.x > whale.x + 200);
+            loop();
+        } else {
+            this.gameOver();
+        }
+    },
+
+    async explainWithAI() {
+        const btn = document.getElementById('explain-btn');
+        const box = document.getElementById('ai-explanation');
+        
+        btn.innerText = "DECRYPTING...";
+        
+        const correctAnswerText = activeQuestion.o[activeQuestion.a];
+        const explanation = await AI.explain(activeQuestion.q, correctAnswerText);
+        
+        box.style.display = 'block';
+        box.innerText = explanation;
+        btn.innerText = "✨ DECRYPT DATA (EXPLAIN)";
+        
+        // Extend the pause so they can read
+        // We effectively rely on the fact the game is paused.
+        // Users will need to wait for the timeout or we cancel the timeout?
+        // For this implementation, the 1.5s timeout in handleAnswer might close it too fast.
+        // A robust fix for Hackathon:
+        // Just prevent the auto-close in handleAnswer if they want to wait.
+        // But simpler: The 'explain' button appears, if they click it, it shows text.
+        // They will likely lose the chance if the timeout fires. 
+        // *Hack Fix*: We won't fix the timeout logic complexity here to keep code small, 
+        // but users usually click explain AFTER the game over or we make the modal sticky.
+    }
+};
+
+// --- OVERRIDE HANDLE ANSWER FOR BETTER UX WITH EXPLAIN BUTTON ---
+// We remove the auto-timeout and add a "Continue" button instead.
+game.triggerQuiz = function() {
+    this.paused = true;
+    activeQuestion = currentQuestions[Math.floor(Math.random() * currentQuestions.length)];
+    
+    const modal = document.getElementById('quiz-screen');
+    modal.classList.remove('hidden');
+    
+    document.getElementById('question-text').innerText = activeQuestion.q;
+    document.getElementById('quiz-title').innerText = "FIREWALL BLOCKED!";
+    document.getElementById('ai-explanation').style.display = 'none';
+    
+    // Create/Reset control buttons
+    let controls = document.getElementById('quiz-controls');
+    if(!controls) {
+        controls = document.createElement('div');
+        controls.id = 'quiz-controls';
+        document.getElementById('quiz-container').appendChild(controls);
+    }
+    controls.innerHTML = ''; // Clear old buttons
+
+    // Explain Button (Hidden initially)
+    const explainBtn = document.createElement('button');
+    explainBtn.className = 'btn btn-explain hidden';
+    explainBtn.innerText = '✨ EXPLAIN (AI)';
+    explainBtn.onclick = () => game.explainWithAI();
+    controls.appendChild(explainBtn);
+
+    // Continue Button (Hidden initially)
+    const continueBtn = document.createElement('button');
+    continueBtn.className = 'btn hidden';
+    continueBtn.innerText = 'CONTINUE >>';
+    continueBtn.style.marginTop = '10px';
+    continueBtn.style.marginLeft = '10px';
+    continueBtn.onclick = () => {
+        // Check if we passed or failed based on global state or UI
+        const isWin = document.getElementById('quiz-title').innerText === "ACCESS GRANTED";
+        game.resumeFromQuiz(isWin);
+    };
+    controls.appendChild(continueBtn);
+
+    const cont = document.getElementById('options-container');
+    cont.innerHTML = '';
+    
+    activeQuestion.o.forEach((opt, idx) => {
+        let div = document.createElement('div');
+        div.className = 'quiz-option';
+        div.innerText = `> ${opt}`;
+        div.onclick = () => {
+            // Visual feedback
+            Array.from(document.getElementsByClassName('quiz-option')).forEach(d => d.style.pointerEvents = 'none');
+            const isCorrect = idx === activeQuestion.a;
+            div.classList.add(isCorrect ? 'correct' : 'wrong');
+            document.getElementById('quiz-title').innerText = isCorrect ? "ACCESS GRANTED" : "ACCESS DENIED";
+            
+            // Show buttons
+            explainBtn.classList.remove('hidden');
+            continueBtn.classList.remove('hidden');
+        };
+        cont.appendChild(div);
+    });
+};
+
+// --- ENTITIES ---
+
+const whale = {
+    x: 50, y: 150, radius: 15, velocity: 0, rotation: 0,
+    reset: function() { this.x = canvas.width * 0.1; this.y = canvas.height / 2; this.velocity = 0; },
+    draw: function() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        this.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (this.velocity * 0.1)));
+        ctx.rotate(this.rotation);
+        
+        if (assets.whaleLoaded) {
+            // Animation: Blink every 90 frames (approx 1.5 seconds)
+            // Eyes closed for 10 frames
+            let sprite = (game.frames % 90 < 10) ? assets.whaleClosed : assets.whaleOpen;
+            
+            // Draw image centered (Adjusted dimensions to 50x40 based on sprite)
+            ctx.drawImage(sprite, -25, -20, 130, 120);
+        } else {
+            // Fallback if images fail to load
+            ctx.fillStyle = '#00f3ff';
+            ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+    },
+    update: function() {
+        this.velocity += GRAVITY;
+        this.y += this.velocity;
+        if (this.y + this.radius >= canvas.height) { this.y = canvas.height - this.radius; game.gameOver(); }
+        if (this.y - this.radius <= 0) { this.y = this.radius; this.velocity = 0; }
+    },
+    flap: function() {
+        this.velocity = FLAP;
+        createParticles(this.x, this.y + 10);
+    }
+};
+
+const pipes = {
+    list: [],
+    reset: function() { this.list = []; },
+    update: function() {
+        if (game.frames % SPAWN_RATE === 0) {
+            const topHeight = Math.random() * (canvas.height - PIPE_GAP - 100) + 50;
+            this.list.push({ x: canvas.width, topHeight: topHeight, passed: false, type: Math.random() > 0.8 ? 'FIREWALL' : 'DATA' });
+        }
+        for (let i = 0; i < this.list.length; i++) {
+            let p = this.list[i];
+            p.x -= PIPE_SPEED;
+            let wBox = 15; let pWidth = 50; 
+            if (whale.x + wBox > p.x && whale.x - wBox < p.x + pWidth) {
+                if (whale.y - wBox < p.topHeight || whale.y + wBox > p.topHeight + PIPE_GAP) {
+                    game.triggerQuiz();
+                    this.list.splice(i, 1); i--; continue;
+                }
+            }
+            if (p.x + pWidth < whale.x && !p.passed) {
+                game.score++; p.passed = true;
+                document.getElementById('score-text').innerText = game.score;
+            }
+            if (p.x + pWidth < 0) { this.list.shift(); i--; }
+        }
+    },
+    draw: function() {
+        ctx.lineWidth = 2;
+        this.list.forEach(p => {
+            let isFirewall = p.type === 'FIREWALL';
+            let mainColor = isFirewall ? '#ff0055' : '#00ff9d';
+            let darkColor = isFirewall ? '#550022' : '#004422';
+            ctx.fillStyle = darkColor; ctx.strokeStyle = mainColor;
+            ctx.fillRect(p.x, 0, 50, p.topHeight); ctx.strokeRect(p.x, 0, 50, p.topHeight);
+            let bottomY = p.topHeight + PIPE_GAP;
+            ctx.fillRect(p.x, bottomY, 50, canvas.height - bottomY); ctx.strokeRect(p.x, bottomY, 50, canvas.height - bottomY);
+        });
+    }
+};
+
+let particleArray = [];
+function createParticles(x, y) {
+    for(let i=0; i<5; i++){ particleArray.push({ x: x, y: y, size: Math.random() * 4 + 1, speedY: Math.random() * 2 + 1, life: 20 }); }
+}
+const particles = {
+    reset: function() { particleArray = []; },
+    updateAndDraw: function() {
+        for (let i = 0; i < particleArray.length; i++) {
+            let p = particleArray[i];
+            p.x -= 2; p.y += p.speedY * 0.2; p.life--;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+            if (p.life <= 0) { particleArray.splice(i, 1); i--; }
+        }
+    }
+}
+
+function loop() {
+    if (!game.active || game.paused) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (assets.bgLoaded) {
+        let bgX = -(game.frames * 0.5) % canvas.width;
+        ctx.drawImage(assets.bg, bgX, 0, canvas.width, canvas.height);
+        ctx.drawImage(assets.bg, bgX + canvas.width, 0, canvas.width, canvas.height);
+    } else {
+        let grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grd.addColorStop(0, "#050511"); grd.addColorStop(1, "#0f1f3d");
+        ctx.fillStyle = grd; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    whale.update(); pipes.update(); particles.updateAndDraw(); pipes.draw(); whale.draw();
+    game.frames++; requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', game.resize); game.resize();
+function handleInput(e) { if (!game.active || game.paused) return; whale.flap(); }
+window.addEventListener('keydown', (e) => { if (e.code === 'Space') handleInput(e); });
+tapArea.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(e); });
+tapArea.addEventListener('mousedown', handleInput);
+
+</script>
+</body>
+</html>
