@@ -294,7 +294,7 @@
             
             <!-- AI Explanation Area -->
             <div id="ai-explanation"></div>
-            <button id="explain-btn" class="btn btn-explain hidden" onclick="game.explainWithAI()">✨ DECRYPT DATA (EXPLAIN)</button>
+            <!-- Controls will be injected here -->
         </div>
     </div>
 
@@ -313,11 +313,11 @@
 <script>
 /*
  * WORLD WIDE WHALE - WHACK 2025
- * Integrated with Gemini API for Dynamic Levels & Explanations
+ * Integrated with Gemini API via Cloudflare Worker for Security
  */
 
 // --- CONFIGURATION ---
-const apiKey = ""; // PASTE YOUR GEMINI API KEY HERE
+const WORKER_URL = "https://whack2025-backend.elena-jin.workers.dev/"; 
 
 // --- ASSET LOADER ---
 const assets = {
@@ -345,7 +345,6 @@ assets.whaleClosed.onload = checkLoad;
 assets.bg.onload = () => { assets.bgLoaded = true; };
 
 // --- DATA & STATE ---
-// Hardcoded fallback data so game works even without API key
 const defaultQuestions = [
     { q: "What is the CPU's fast internal memory called?", o: ["RAM", "HDD", "Cache", "ROM"], a: 2 },
     { q: "What does RAM stand for?", o: ["Random Access Memory", "Read All Memory", "Run Access Mode", "Real Active Memory"], a: 0 },
@@ -357,59 +356,45 @@ const defaultQuestions = [
 let currentQuestions = [...defaultQuestions];
 let activeQuestion = null;
 
-// --- GEMINI API HANDLER ---
+// --- GEMINI API HANDLER (VIA WORKER) ---
 const AI = {
-    available: () => apiKey.length > 0,
-
     async generateQuestions(topic) {
-        if (!this.available()) {
-            alert("Please add an API Key in the code to use AI features!");
-            return null;
-        }
-
-        const prompt = `Generate 5 multiple choice questions about "${topic}". 
-        Return ONLY valid JSON in this format: 
-        [{"q": "Question text", "o": ["Option1", "Option2", "Option3", "Option4"], "a": 0}] 
-        where 'a' is the index (0-3) of the correct answer. Keep questions concise (under 15 words).`;
-
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+            const response = await fetch(WORKER_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { responseMimeType: "application/json" }
+                body: JSON.stringify({ 
+                    action: 'generate_questions',
+                    topic: topic 
                 })
             });
 
             const data = await response.json();
+            // Worker returns raw Gemini object, extract text
             const text = data.candidates[0].content.parts[0].text;
             return JSON.parse(text);
         } catch (error) {
-            console.error("Gemini Error:", error);
+            console.error("Worker Error:", error);
             return null;
         }
     },
 
     async explain(question, answer) {
-        if (!this.available()) return "AI features not enabled.";
-
-        const prompt = `Explain in 1 short, witty sentence why "${answer}" is the correct answer to "${question}". 
-        Pretend you are a helpful computer virus.`;
-
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+            const response = await fetch(WORKER_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }]
+                    action: 'explain',
+                    question: question,
+                    answer: answer
                 })
             });
 
             const data = await response.json();
             return data.candidates[0].content.parts[0].text;
         } catch (error) {
-            return "Encryption too strong. Cannot explain.";
+            return "Connection lost. Cannot decrypt data.";
         }
     }
 };
@@ -448,11 +433,11 @@ let game = {
             
             if (newQs && newQs.length > 0) {
                 currentQuestions = newQs;
-                document.getElementById('region-text').innerText = topicInput.toUpperCase();
+                document.getElementById('region-text').innerText = topicInput.toUpperCase().substring(0, 15);
             } else {
-                alert("AI Generation failed (or no Key). Using default data.");
+                alert("Could not connect to AI Mainframe. Using offline backup.");
                 currentQuestions = [...defaultQuestions];
-                document.getElementById('region-text').innerText = "DEFAULT SYS";
+                document.getElementById('region-text').innerText = "OFFLINE MODE";
             }
         } else {
             currentQuestions = [...defaultQuestions];
@@ -492,14 +477,41 @@ let game = {
         this.paused = true;
         activeQuestion = currentQuestions[Math.floor(Math.random() * currentQuestions.length)];
         
-        document.getElementById('quiz-screen').classList.remove('hidden');
+        const modal = document.getElementById('quiz-screen');
+        modal.classList.remove('hidden');
+        
         document.getElementById('question-text').innerText = activeQuestion.q;
         document.getElementById('quiz-title').innerText = "FIREWALL BLOCKED!";
-        
-        // Reset UI elements
         document.getElementById('ai-explanation').style.display = 'none';
-        document.getElementById('explain-btn').classList.add('hidden');
         
+        // Create/Reset control buttons
+        let controls = document.getElementById('quiz-controls');
+        if(!controls) {
+            controls = document.createElement('div');
+            controls.id = 'quiz-controls';
+            document.getElementById('quiz-container').appendChild(controls);
+        }
+        controls.innerHTML = ''; 
+
+        // Explain Button (Hidden initially)
+        const explainBtn = document.createElement('button');
+        explainBtn.className = 'btn btn-explain hidden';
+        explainBtn.innerText = '✨ EXPLAIN (AI)';
+        explainBtn.onclick = () => game.explainWithAI();
+        controls.appendChild(explainBtn);
+
+        // Continue Button (Hidden initially)
+        const continueBtn = document.createElement('button');
+        continueBtn.className = 'btn hidden';
+        continueBtn.innerText = 'CONTINUE >>';
+        continueBtn.style.marginTop = '10px';
+        continueBtn.style.marginLeft = '10px';
+        continueBtn.onclick = () => {
+            const isWin = document.getElementById('quiz-title').innerText === "ACCESS GRANTED";
+            game.resumeFromQuiz(isWin);
+        };
+        controls.appendChild(continueBtn);
+
         const cont = document.getElementById('options-container');
         cont.innerHTML = '';
         
@@ -507,40 +519,22 @@ let game = {
             let div = document.createElement('div');
             div.className = 'quiz-option';
             div.innerText = `> ${opt}`;
-            div.onclick = (e) => this.handleAnswer(idx, div);
+            div.onclick = () => {
+                // Visual feedback
+                Array.from(document.getElementsByClassName('quiz-option')).forEach(d => d.style.pointerEvents = 'none');
+                const isCorrect = idx === activeQuestion.a;
+                div.classList.add(isCorrect ? 'correct' : 'wrong');
+                document.getElementById('quiz-title').innerText = isCorrect ? "ACCESS GRANTED" : "ACCESS DENIED";
+                
+                // Show buttons
+                explainBtn.classList.remove('hidden');
+                continueBtn.classList.remove('hidden');
+            };
             cont.appendChild(div);
         });
     },
 
-    handleAnswer: function(idx, div) {
-        // Disable further clicks
-        Array.from(document.getElementsByClassName('quiz-option')).forEach(d => d.style.pointerEvents = 'none');
-
-        const isCorrect = idx === activeQuestion.a;
-        div.classList.add(isCorrect ? 'correct' : 'wrong');
-
-        // Show Explain Button
-        document.getElementById('explain-btn').classList.remove('hidden');
-        
-        if (isCorrect) {
-            document.getElementById('quiz-title').innerText = "ACCESS GRANTED";
-            setTimeout(() => this.resumeFromQuiz(true), 1500);
-        } else {
-            document.getElementById('quiz-title').innerText = "ACCESS DENIED";
-            setTimeout(() => this.resumeFromQuiz(false), 1500);
-        }
-    },
-
     resumeFromQuiz: function(success) {
-        // If they clicked explain, don't close yet (logic handled by user patience, 
-        // but for game flow we usually close automatically. 
-        // Let's only auto-close if they haven't clicked explain in 1.5s. 
-        // Actually, simpler: Auto close, but if they click explain, pause the auto-close?
-        // For this MVP, let's just auto-resume. The explain button is best used FAST or make the user close manually.
-        // BETTER UX: If answer is wrong/right, wait for user to click "Continue" or "Explain".
-        // For flow, we will just resume unless they are reading.
-        
-        // To keep it snappy:
         document.getElementById('quiz-screen').classList.add('hidden');
         if (success) {
             this.paused = false;
@@ -554,7 +548,7 @@ let game = {
     },
 
     async explainWithAI() {
-        const btn = document.getElementById('explain-btn');
+        const btn = document.querySelector('.btn-explain');
         const box = document.getElementById('ai-explanation');
         
         btn.innerText = "DECRYPTING...";
@@ -565,82 +559,7 @@ let game = {
         box.style.display = 'block';
         box.innerText = explanation;
         btn.innerText = "✨ DECRYPT DATA (EXPLAIN)";
-        
-        // Extend the pause so they can read
-        // We effectively rely on the fact the game is paused.
-        // Users will need to wait for the timeout or we cancel the timeout?
-        // For this implementation, the 1.5s timeout in handleAnswer might close it too fast.
-        // A robust fix for Hackathon:
-        // Just prevent the auto-close in handleAnswer if they want to wait.
-        // But simpler: The 'explain' button appears, if they click it, it shows text.
-        // They will likely lose the chance if the timeout fires. 
-        // *Hack Fix*: We won't fix the timeout logic complexity here to keep code small, 
-        // but users usually click explain AFTER the game over or we make the modal sticky.
     }
-};
-
-// --- OVERRIDE HANDLE ANSWER FOR BETTER UX WITH EXPLAIN BUTTON ---
-// We remove the auto-timeout and add a "Continue" button instead.
-game.triggerQuiz = function() {
-    this.paused = true;
-    activeQuestion = currentQuestions[Math.floor(Math.random() * currentQuestions.length)];
-    
-    const modal = document.getElementById('quiz-screen');
-    modal.classList.remove('hidden');
-    
-    document.getElementById('question-text').innerText = activeQuestion.q;
-    document.getElementById('quiz-title').innerText = "FIREWALL BLOCKED!";
-    document.getElementById('ai-explanation').style.display = 'none';
-    
-    // Create/Reset control buttons
-    let controls = document.getElementById('quiz-controls');
-    if(!controls) {
-        controls = document.createElement('div');
-        controls.id = 'quiz-controls';
-        document.getElementById('quiz-container').appendChild(controls);
-    }
-    controls.innerHTML = ''; // Clear old buttons
-
-    // Explain Button (Hidden initially)
-    const explainBtn = document.createElement('button');
-    explainBtn.className = 'btn btn-explain hidden';
-    explainBtn.innerText = '✨ EXPLAIN (AI)';
-    explainBtn.onclick = () => game.explainWithAI();
-    controls.appendChild(explainBtn);
-
-    // Continue Button (Hidden initially)
-    const continueBtn = document.createElement('button');
-    continueBtn.className = 'btn hidden';
-    continueBtn.innerText = 'CONTINUE >>';
-    continueBtn.style.marginTop = '10px';
-    continueBtn.style.marginLeft = '10px';
-    continueBtn.onclick = () => {
-        // Check if we passed or failed based on global state or UI
-        const isWin = document.getElementById('quiz-title').innerText === "ACCESS GRANTED";
-        game.resumeFromQuiz(isWin);
-    };
-    controls.appendChild(continueBtn);
-
-    const cont = document.getElementById('options-container');
-    cont.innerHTML = '';
-    
-    activeQuestion.o.forEach((opt, idx) => {
-        let div = document.createElement('div');
-        div.className = 'quiz-option';
-        div.innerText = `> ${opt}`;
-        div.onclick = () => {
-            // Visual feedback
-            Array.from(document.getElementsByClassName('quiz-option')).forEach(d => d.style.pointerEvents = 'none');
-            const isCorrect = idx === activeQuestion.a;
-            div.classList.add(isCorrect ? 'correct' : 'wrong');
-            document.getElementById('quiz-title').innerText = isCorrect ? "ACCESS GRANTED" : "ACCESS DENIED";
-            
-            // Show buttons
-            explainBtn.classList.remove('hidden');
-            continueBtn.classList.remove('hidden');
-        };
-        cont.appendChild(div);
-    });
 };
 
 // --- ENTITIES ---
@@ -658,11 +577,9 @@ const whale = {
             // Animation: Blink every 90 frames (approx 1.5 seconds)
             // Eyes closed for 10 frames
             let sprite = (game.frames % 90 < 10) ? assets.whaleClosed : assets.whaleOpen;
-            
-            // Draw image centered (Adjusted dimensions to 50x40 based on sprite)
-            ctx.drawImage(sprite, -25, -20, 130, 120);
+            ctx.drawImage(sprite, -25, -20, 50, 40);
         } else {
-            // Fallback if images fail to load
+            // Fallback
             ctx.fillStyle = '#00f3ff';
             ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
         }
